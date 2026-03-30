@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Karin RPG Habits</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0f172a; --card: #1e293b; --text: #f8fafc;
+            --xp: #38bdf8; --hp: #f43f5e; --gold: #fbbf24; --success: #10b981;
+        }
+        body { font-family: sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 15px; padding-bottom: 80px; }
+        
+        /* Stats Dashboard */
+        .header { background: var(--card); padding: 15px; border-radius: 20px; position: sticky; top: 0; z-index: 100; box-shadow: 0 4px 6px rgba(0,0,0,0.3); border: 1px solid #334155; }
+        .bar-container { margin-bottom: 8px; }
+        .label { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; display: flex; justify-content: space-between; }
+        .bar-bg { background: #334155; height: 10px; border-radius: 5px; margin-top: 4px; overflow: hidden; }
+        .bar-fill { height: 100%; transition: width 0.4s; }
+        
+        /* Grid de Hábitos */
+        .habits-grid { display: grid; gap: 12px; margin-top: 20px; }
+        .habit-card { background: var(--card); padding: 15px; border-radius: 15px; display: flex; justify-content: space-between; align-items: center; border-left: 4px solid #475569; }
+        .habit-card.done { border-left-color: var(--success); opacity: 0.8; }
+        .habit-info h3 { margin: 0; font-size: 14px; }
+        .habit-info p { margin: 0; font-size: 11px; color: #94a3b8; }
+        
+        .check-btn { width: 45px; height: 45px; border-radius: 12px; border: none; background: #334155; color: white; font-size: 20px; }
+        .check-btn.active { background: var(--success); box-shadow: 0 0 10px var(--success); }
+
+        /* Navegación Inferior */
+        .nav { position: fixed; bottom: 0; left: 0; width: 100%; background: var(--card); display: flex; justify-content: space-around; padding: 15px 0; border-top: 1px solid #334155; }
+        .nav-item { color: #94a3b8; text-decoration: none; font-size: 24px; border: none; background: none; }
+        .nav-item.active { color: var(--gold); }
+
+        /* Vistas */
+        .view { display: none; }
+        .view.active { display: block; }
+        
+        /* Álbum */
+        .album-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 15px; }
+        .card-slot { aspect-ratio: 2/3; background: #334155; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 10px; text-align: center; padding: 5px; border: 1px dashed #475569; }
+        .card-owned { background: linear-gradient(45deg, #475569, #1e293b); border: 1px solid var(--gold); box-shadow: 0 0 5px var(--gold); }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <div class="bar-container">
+            <span class="label">HP (Vida) <span id="hp-val">100/100</span></span>
+            <div class="bar-bg"><div id="hp-bar" class="bar-fill" style="background: var(--hp); width: 100%"></div></div>
+        </div>
+        <div class="bar-container">
+            <span class="label">XP (Nivel <span id="lvl-val">1</span>) <span id="xp-val">0/1000</span></span>
+            <div class="bar-bg"><div id="xp-bar" class="bar-fill" style="background: var(--xp); width: 0%"></div></div>
+        </div>
+        <div style="text-align: center; color: var(--gold); font-weight: bold; margin-top: 5px;">
+            <i class="fa-solid fa-coins"></i> <span id="coins-val">0</span> Monedas
+        </div>
+    </div>
+
+    <div id="view-habits" class="view active">
+        <div class="habits-grid" id="habits-list"></div>
+    </div>
+
+    <div id="view-shop" class="view">
+        <h2 style="font-size: 18px;">Tienda de Sobres</h2>
+        <button onclick="buyCard(50, 'Común')" style="width:100%; padding:15px; background:var(--card); border:1px solid var(--gold); color:white; border-radius:10px; margin-bottom:10px;">
+            Sobre Común (50 Monedas)
+        </button>
+        <button onclick="buyCard(150, 'Raro')" style="width:100%; padding:15px; background:var(--card); border:1px solid var(--xp); color:white; border-radius:10px;">
+            Sobre Raro (150 Monedas)
+        </button>
+        
+        <h2 style="font-size: 18px; margin-top: 20px;">Mi Colección</h2>
+        <div class="album-grid" id="album"></div>
+    </div>
+
+    <nav class="nav">
+        <button class="nav-item active" onclick="showView('habits')"><i class="fa-solid fa-list-check"></i></button>
+        <button class="nav-item" onclick="showView('shop')"><i class="fa-solid fa-id-card"></i></button>
+    </nav>
+
+    <script>
+        // Configuración de Hábitos
+        const CONFIG = [
+            { id: 1, name: 'Entrenamiento', meta: 3, pts: 20, icon: 'dumbbell' },
+            { id: 2, name: 'Lectura/Escritura', meta: 3, pts: 15, icon: 'book-open' },
+            { id: 3, name: 'Gaming (Misiones)', meta: 2, pts: 10, icon: 'gamepad' },
+            { id: 4, name: 'Alimentación/Agua', meta: 5, pts: 10, icon: 'droplet' },
+            { id: 5, name: 'Maestría (2h)', meta: 5, pts: 25, icon: 'graduation-cap' },
+            { id: 6, name: 'Estoicismo/Meditación', meta: 6, pts: 15, icon: 'brain' }
+        ];
+
+        const SERIES = ["Breaking Bad", "The Boys", "Simpsons", "Pokémon", "Dragon Ball", "Bojack"];
+        
+        let state = JSON.parse(localStorage.getItem('karinRPG')) || {
+            hp: 100, xp: 0, coins: 0, level: 1,
+            lastWeek: getWeekNumber(new Date()),
+            dailyChecks: {}, // "id-date": true
+            weeklyProgress: {}, // "id": count
+            inventory: [],
+            coinsExpiry: [] // {amt, date}
+        };
+
+        function save() {
+            localStorage.setItem('karinRPG', JSON.stringify(state));
+            updateUI();
+        }
+
+        function getWeekNumber(d) {
+            d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+            d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+            return Math.ceil((((d - new Date(Date.UTC(d.getUTCFullYear(), 0, 1))) / 86400000) + 1) / 7);
+        }
+
+        function updateUI() {
+            document.getElementById('hp-bar').style.width = state.hp + "%";
+            document.getElementById('hp-val').innerText = state.hp + "/100";
+            document.getElementById('xp-bar').style.width = (state.xp % 1000) / 10 + "%";
+            document.getElementById('xp-val').innerText = (state.xp % 1000) + "/1000";
+            document.getElementById('lvl-val').innerText = Math.floor(state.xp / 1000) + 1;
+            document.getElementById('coins-val').innerText = state.coins;
+            renderHabits();
+            renderAlbum();
+        }
+
+        function renderHabits() {
+            const container = document.getElementById('habits-list');
+            const today = new Date().toDateString();
+            container.innerHTML = CONFIG.map(h => {
+                const isDone = state.dailyChecks[`${h.id}-${today}`];
+                const weekCount = state.weeklyProgress[h.id] || 0;
+                return `
+                    <div class="habit-card ${isDone ? 'done' : ''}">
+                        <div class="habit-info">
+                            <h3><i class="fa-solid fa-${h.icon}"></i> ${h.name}</h3>
+                            <p>Progreso Semanal: ${weekCount}/${h.meta}</p>
+                        </div>
+                        <button class="check-btn ${isDone ? 'active' : ''}" 
+                                onclick="toggleHabit(${h.id}, '${today}')">
+                            <i class="fa-solid fa-check"></i>
+                        </button>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function toggleHabit(id, dateStr) {
+            const key = `${id}-${dateStr}`;
+            const habit = CONFIG.find(h => h.id === id);
+            if (!state.dailyChecks[key]) {
+                state.dailyChecks[key] = true;
+                state.weeklyProgress[id] = (state.weeklyProgress[id] || 0) + 1;
+                state.xp += habit.pts;
+                state.coins += habit.pts;
+                // Registro para caducidad (45 días)
+                state.coinsExpiry.push({amt: habit.pts, expiry: Date.now() + (45 * 24 * 60 * 60 * 1000)});
+            }
+            save();
+        }
+
+        function buyCard(cost, rarity) {
+            if (state.coins < cost) return alert("Monedas insuficientes");
+            state.coins -= cost;
+            const series = SERIES[Math.floor(Math.random() * SERIES.length)];
+            const name = `${rarity}: ${series} Character #${Math.floor(Math.random()*100)}`;
+            state.inventory.push({name, rarity});
+            save();
+        }
+
+        function renderAlbum() {
+            const album = document.getElementById('album');
+            album.innerHTML = state.inventory.map(c => `
+                <div class="card-slot card-owned">${c.name}</div>
+            `).join('') + '<div class="card-slot">?</div>'.repeat(6);
+        }
+
+        function showView(v) {
+            document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
+            document.getElementById('view-' + v).classList.add('active');
+            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+            event.currentTarget.classList.add('active');
+        }
+
+        // Lógica de Reinicio Semanal y Daño
+        function checkNewWeek() {
+            const currentWeek = getWeekNumber(new Date());
+            if (currentWeek !== state.lastWeek) {
+                // Calcular Daño
+                CONFIG.forEach(h => {
+                    const count = state.weeklyProgress[h.id] || 0;
+                    if (count < (h.meta / 2)) {
+                        state.hp -= (h.meta - count) * 10;
+                    }
+                });
+                if (state.hp <= 0) {
+                    state.hp = 100;
+                    state.inventory.shift(); // Quema una carta
+                    alert("¡HAS MUERTO! Perdiste una carta de tu colección.");
+                }
+                state.weeklyProgress = {};
+                state.lastWeek = currentWeek;
+                save();
+            }
+        }
+
+        checkNewWeek();
+        updateUI();
+    </script>
+</body>
+</html>
